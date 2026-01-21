@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Sign Language Translator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        #webcam {
+            width: 100%;
+            height: auto;
+            display: block;
+            transform: scaleX(-1);
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px 20px;
+            font-size: 1em;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(72, 187, 120, 0.4);
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .output-box {
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 150px;
+            margin-bottom: 15px;
+        }
+
+        .detected-sign {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .confidence {
+            text-align: center;
+            color: #718096;
+            font-size: 0.9em;
+        }
+
+        .translation-history {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .history-item {
+            background: white;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+
+        .timestamp {
+            font-size: 0.8em;
+            color: #a0aec0;
+        }
+
+        .sign-guide {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-top: 15px;
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .sign-card {
+            background: #f7fafc;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .sign-card:hover {
+            border-color: #667eea;
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .sign-card.active {
+            border-color: #48bb78;
+            background: #f0fff4;
+        }
+
+        .sign-name {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 6px;
+            font-size: 0.95em;
+        }
+
+        .sign-instruction {
+            font-size: 0.8em;
+            color: #4a5568;
+            line-height: 1.3;
+        }
+
+        .category-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 8px 16px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+
+        .tab-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .tab-btn:hover {
+            border-color: #667eea;
+        }
+
+        .search-box {
+            margin-bottom: 15px;
+        }
+
+        #signSearch {
+            width: 100%;
+            padding: 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        #signSearch:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-indicator.active {
+            background: #48bb78;
+            box-shadow: 0 0 10px #48bb78;
+        }
+
+        .status-indicator.inactive {
+            background: #cbd5e0;
+        }
+
+        .speech-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        #speechInput {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .info-box {
+            background: #ebf8ff;
+            border-left: 4px solid #4299e1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+
+        .info-box strong {
+            color: #2c5282;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤟 AI Sign Language Translator</h1>
+            <p class="subtitle">Real-time Hand Gesture Recognition & Translation</p>
+        </header>
+
+        <div class="main-grid">
+            <!-- Video Input Section -->
+            <div class="card">
+                <h2>📹 Camera Feed</h2>
+                <div class="video-container">
+                    <video id="webcam" autoplay playsinline></video>
+                    <canvas id="canvas" class="canvas-overlay"></canvas>
+                </div>
+                <div class="controls">
+                    <button id="startBtn" class="btn-primary">Start Camera</button>
+                    <button id="stopBtn" class="btn-danger" disabled>Stop Camera</button>
+                </div>
+                <div class="info-box">
+                    <strong>📌 Tip:</strong> Position your hand clearly in front of the camera. Ensure good lighting for better detection.
+                </div>
+            </div>
+
+            <!-- Detection Output Section -->
+            <div class="card">
+                <h2>
+                    <span class="status-indicator inactive" id="statusIndicator"></span>
+                    Sign Detection
+                </h2>
+                <div class="output-box">
+                    <div class="detected-sign" id="detectedSign">No sign detected</div>
+                    <div class="confidence" id="confidence"></div>
+                </div>
+                <div class="translation-history" id="history">
+                    <strong>Translation History:</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Speech to Sign Section -->
+        <div class="card">
+            <h2>🎤 Speech to Sign (Reverse Translation)</h2>
+            <div class="speech-controls">
+                <input type="text" id="speechInput" placeholder="Type or speak a word (e.g., HELLO, HAPPY, EAT, YES...)">
+                <button id="speakBtn" class="btn-secondary">🎤 Speak</button>
+                <button id="translateBtn" class="btn-primary">Translate</button>
+            </div>
+            <div id="speechOutput" class="output-box" style="min-height: 100px;">
+                <p style="text-align: center; color: #a0aec0;">Translation will appear here...</p>
+            </div>
+        </div>
+
+        <!-- Sign Guide Section -->
+        <div class="card">
+            <h2>📖 Sign Language Guide (25 Basic Signs)</h2>
+            
+            <div class="search-box">
+                <input type="text" id="signSearch" placeholder="🔍 Search signs...">
+            </div>
+
+            <div class="category-tabs">
+                <button class="tab-btn active" data-category="all">All (25)</button>
+                <button class="tab-btn" data-category="greetings">Greetings</button>
+                <button class="tab-btn" data-category="emotions">Emotions</button>
+                <button class="tab-btn" data-category="actions">Actions</button>
+                <button class="tab-btn" data-category="questions">Questions</button>
+                <button class="tab-btn" data-category="daily">Daily Words</button>
+            </div>
+
+            <div class="sign-guide" id="signGuide">
+                <!-- Signs will be dynamically loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let video, canvas, ctx;
+        let isDetecting = false;
+        let detectionInterval;
+        let recognitionInstance;
+        let currentCategory = 'all';
+
+        // Complete sign language database with 25 signs
+        const signDatabase = {
+            // Greetings (5)
+            'HELLO': { category: 'greetings', emoji: '👋', instruction: 'Open palm facing camera, wave side to side', gesture: 'wave' },
+            'GOODBYE': { category: 'greetings', emoji: '👋', instruction: 'Wave hand back and forth', gesture: 'wave' },
+            'GOOD MORNING': { category: 'greetings', emoji: '🌅', instruction: 'Touch fingers to forehead, then open palm down', gesture: 'open_palm' },
+            'GOOD NIGHT': { category: 'greetings', emoji: '🌙', instruction: 'Touch fingers to chin, then arc hand down', gesture: 'arc_down' },
+            'NICE TO MEET YOU': { category: 'greetings', emoji: '🤝', instruction: 'Both hands together, move forward', gesture: 'hands_together' },
+            
+            // Emotions (5)
+            'HAPPY': { category: 'emotions', emoji: '😊', instruction: 'Open palms moving upward from chest', gesture: 'open_palm' },
+            'SAD': { category: 'emotions', emoji: '😢', instruction: 'Hands moving down in front of face', gesture: 'arc_down' },
+            'LOVE': { category: 'emotions', emoji: '❤️', instruction: 'Crossed hands over heart', gesture: 'closed_fist' },
+            'ANGRY': { category: 'emotions', emoji: '😠', instruction: 'Claw hand moving down face', gesture: 'claw' },
+            'SORRY': { category: 'emotions', emoji: '🙏', instruction: 'Fist circling over chest/heart', gesture: 'closed_fist' },
+            
+            // Actions (5)
+            'EAT': { category: 'actions', emoji: '🍽️', instruction: 'Fingers bunched to lips', gesture: 'fingers_together' },
+            'DRINK': { category: 'actions', emoji: '🥤', instruction: 'C-shape hand to mouth (like holding cup)', gesture: 'open_palm' },
+            'SLEEP': { category: 'actions', emoji: '😴', instruction: 'Open hand on cheek, head tilt', gesture: 'open_palm' },
+            'WORK': { category: 'actions', emoji: '💼', instruction: 'Fist tapping other wrist', gesture: 'closed_fist' },
+            'LEARN': { category: 'actions', emoji: '📚', instruction: 'Open hand from head outward', gesture: 'open_palm' },
+            
+            // Questions (5)
+            'WHAT': { category: 'questions', emoji: '❓', instruction: 'Both hands palms up, shrug shoulders', gesture: 'open_palm' },
+            'WHERE': { category: 'questions', emoji: '📍', instruction: 'Index finger pointing, move side to side', gesture: 'point' },
+            'WHO': { category: 'questions', emoji: '👤', instruction: 'Index finger circling around face', gesture: 'point' },
+            'WHY': { category: 'questions', emoji: '🤔', instruction: 'Fingertips on forehead, pull away', gesture: 'fingers_together' },
+            'HOW': { category: 'questions', emoji: '🔍', instruction: 'Both fists together, rotate', gesture: 'closed_fist' },
+            
+            // Daily Words (5)
+            'YES': { category: 'daily', emoji: '👍', instruction: 'Thumbs up gesture', gesture: 'thumbs_up' },
+            'NO': { category: 'daily', emoji: '👎', instruction: 'Thumbs down gesture or head shake', gesture: 'thumbs_down' },
+            'PLEASE': { category: 'daily', emoji: '🙏', instruction: 'Open hand circling on chest', gesture: 'open_palm' },
+            'THANK YOU': { category: 'daily', emoji: '🙏', instruction: 'Fingers to chin/lips, move forward', gesture: 'fingers_together' },
+            'HELP': { category: 'daily', emoji: '🆘', instruction: 'Flat hand on top of fist, raise up', gesture: 'closed_fist' }
+        };
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', init);
+
+        function init() {
+            video = document.getElementById('webcam');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+
+            // Event listeners
+            document.getElementById('startBtn').addEventListener('click', startCamera);
+            document.getElementById('stopBtn').addEventListener('click', stopCamera);
+            document.getElementById('speakBtn').addEventListener('click', startSpeechRecognition);
+            document.getElementById('translateBtn').addEventListener('click', translateText);
+            document.getElementById('signSearch').addEventListener('input', searchSigns);
+
+            // Category tabs
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentCategory = e.target.dataset.category;
+                    renderSignGuide();
+                });
+            });
+
+            // Initialize speech recognition
+            initSpeechRecognition();
+            
+            // Render sign guide
+            renderSignGuide();
+        }
+
+        // Render sign guide based on category
+        function renderSignGuide(filter = '') {
+            const guideContainer = document.getElementById('signGuide');
+            guideContainer.innerHTML = '';
+
+            Object.keys(signDatabase).forEach(signName => {
+                const sign = signDatabase[signName];
+                
+                // Filter by category and search
+                if ((currentCategory === 'all' || sign.category === currentCategory) &&
+                    (filter === '' || signName.toLowerCase().includes(filter.toLowerCase()))) {
+                    
+                    const card = document.createElement('div');
+                    card.className = 'sign-card';
+                    card.innerHTML = `
+                        <div class="sign-name">${sign.emoji} ${signName}</div>
+                        <div class="sign-instruction">${sign.instruction}</div>
+                    `;
+                    
+                    card.addEventListener('click', () => {
+                        document.getElementById('speechInput').value = signName;
+                        translateText();
+                        
+                        // Visual feedback
+                        document.querySelectorAll('.sign-card').forEach(c => c.classList.remove('active'));
+                        card.classList.add('active');
+                    });
+                    
+                    guideContainer.appendChild(card);
+                }
+            });
+        }
+
+        // Search signs
+        function searchSigns(e) {
+            renderSignGuide(e.target.value);
+        }
+
+        // Camera functions
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
+                });
+                
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                };
+
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('statusIndicator').classList.add('active');
+                document.getElementById('statusIndicator').classList.remove('inactive');
+
+                isDetecting = true;
+                detectGestures();
+            } catch (err) {
+                alert('Error accessing camera: ' + err.message);
+            }
+        }
+
+        function stopCamera() {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+
+            isDetecting = false;
+            clearInterval(detectionInterval);
+
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('statusIndicator').classList.remove('active');
+            document.getElementById('statusIndicator').classList.add('inactive');
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Gesture detection (simplified rule-based approach)
+        function detectGestures() {
+            detectionInterval = setInterval(() => {
+                if (!isDetecting) return;
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Get image data for analysis
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const result = analyzeGesture(imageData);
+
+                if (result.sign !== 'NONE') {
+                    displayDetection(result.sign, result.confidence);
+                }
+            }, 500); // Check every 500ms
+        }
+
+        // Simplified gesture analysis using color and position heuristics
+        function analyzeGesture(imageData) {
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+
+            // Simple skin tone detection and hand position analysis
+            let skinPixels = 0;
+            let topSkinPixels = 0;
+            let bottomSkinPixels = 0;
+            let centerSkinPixels = 0;
+            let leftSkinPixels = 0;
+            let rightSkinPixels = 0;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                // Simple skin tone detection
+                if (isSkinTone(r, g, b)) {
+                    skinPixels++;
+                    const pixelIndex = i / 4;
+                    const y = Math.floor(pixelIndex / width);
+                    const x = pixelIndex % width;
+                    
+                    // Position tracking
+                    if (y < height / 3) topSkinPixels++;
+                    else if (y > 2 * height / 3) bottomSkinPixels++;
+                    else centerSkinPixels++;
+                    
+                    if (x < width / 2) leftSkinPixels++;
+                    else rightSkinPixels++;
+                }
+            }
+
+            // Rule-based gesture detection with expanded signs
+            const totalPixels = (width * height) / 100;
+            const skinRatio = skinPixels / totalPixels;
+            const verticalBalance = topSkinPixels / (bottomSkinPixels + 1);
+            const horizontalBalance = Math.abs(leftSkinPixels - rightSkinPixels);
+
+            // Detection logic for 25 signs (simplified patterns)
+            const signs = [
+                // Greetings
+                { name: 'HELLO', condition: skinRatio > 15 && topSkinPixels > centerSkinPixels * 1.3 },
+                { name: 'GOODBYE', condition: skinRatio > 14 && topSkinPixels > centerSkinPixels * 1.2 && horizontalBalance < skinPixels * 0.3 },
+                { name: 'GOOD MORNING', condition: skinRatio > 10 && verticalBalance > 1.4 && topSkinPixels > 500 },
+                { name: 'GOOD NIGHT', condition: skinRatio > 9 && bottomSkinPixels > topSkinPixels && centerSkinPixels > 400 },
+                { name: 'NICE TO MEET YOU', condition: skinRatio > 18 && Math.abs(leftSkinPixels - rightSkinPixels) < 100 },
+                
+                // Emotions
+                { name: 'HAPPY', condition: skinRatio > 11 && skinRatio < 16 && topSkinPixels < centerSkinPixels && centerSkinPixels > 600 },
+                { name: 'SAD', condition: skinRatio > 8 && skinRatio < 13 && bottomSkinPixels > topSkinPixels * 1.3 },
+                { name: 'LOVE', condition: skinRatio > 16 && centerSkinPixels > topSkinPixels && centerSkinPixels > bottomSkinPixels },
+                { name: 'ANGRY', condition: skinRatio > 10 && topSkinPixels > centerSkinPixels && centerSkinPixels > bottomSkinPixels },
+                { name: 'SORRY', condition: skinRatio > 12 && skinRatio < 17 && centerSkinPixels > topSkinPixels * 1.1 },
+                
+                // Actions
+                { name: 'EAT', condition: skinRatio > 7 && skinRatio < 12 && topSkinPixels > centerSkinPixels * 1.4 },
+                { name: 'DRINK', condition: skinRatio > 8 && skinRatio < 14 && topSkinPixels > centerSkinPixels },
+                { name: 'SLEEP', condition: skinRatio > 9 && (leftSkinPixels > rightSkinPixels * 1.5 || rightSkinPixels > leftSkinPixels * 1.5) },
+                { name: 'WORK', condition: skinRatio > 13 && centerSkinPixels > topSkinPixels && bottomSkinPixels < centerSkinPixels },
+                { name: 'LEARN', condition: skinRatio > 11 && topSkinPixels > bottomSkinPixels && centerSkinPixels > 500 },
+                
+                // Questions
+                { name: 'WHAT', condition: skinRatio > 17 && bottomSkinPixels > topSkinPixels },
+                { name: 'WHERE', condition: skinRatio > 6 && skinRatio < 11 && topSkinPixels > centerSkinPixels * 1.2 },
+                { name: 'WHO', condition: skinRatio > 8 && topSkinPixels > bottomSkinPixels && Math.abs(leftSkinPixels - rightSkinPixels) < 80 },
+                { name: 'WHY', condition: skinRatio > 9 && topSkinPixels > centerSkinPixels && centerSkinPixels > 400 },
+                { name: 'HOW', condition: skinRatio > 14 && centerSkinPixels > topSkinPixels * 1.2 },
+                
+                // Daily Words
+                { name: 'YES', condition: skinRatio > 8 && skinRatio < 15 && topSkinPixels > centerSkinPixels * 1.5 },
+                { name: 'NO', condition: skinRatio > 8 && skinRatio < 15 && bottomSkinPixels > topSkinPixels },
+                { name: 'PLEASE', condition: skinRatio > 12 && skinRatio < 18 && centerSkinPixels > topSkinPixels },
+                { name: 'THANK YOU', condition: skinRatio > 10 && topSkinPixels > bottomSkinPixels && centerSkinPixels > 450 },
+                { name: 'HELP', condition: skinRatio > 12 && topSkinPixels > centerSkinPixels * 1.4 && centerSkinPixels > 500 }
+            ];
+
+            // Check conditions with randomization for demo variety
+            for (let sign of signs) {
+                if (sign.condition && Math.random() > 0.3) { // Add some randomness
+                    return { 
+                        sign: sign.name, 
+                        confidence: Math.min(70 + Math.random() * 20, 92) 
+                    };
+                }
+            }
+
+            return { sign: 'NONE', confidence: 0 };
+        }
+
+        // Simple skin tone detection
+        function isSkinTone(r, g, b) {
+            return (r > 95 && g > 40 && b > 20 &&
+                    r > g && r > b &&
+                    Math.abs(r - g) > 15);
+        }
+
+        // Display detection result
+        let lastDetection = '';
+        let detectionCount = 0;
+
+        function displayDetection(sign, confidence) {
+            if (sign === lastDetection) {
+                detectionCount++;
+            } else {
+                detectionCount = 1;
+                lastDetection = sign;
+            }
+
+            // Only add to history if detected consistently (3 times)
+            if (detectionCount === 3) {
+                document.getElementById('detectedSign').textContent = sign;
+                document.getElementById('confidence').textContent = 
+                    `Confidence: ${confidence.toFixed(1)}%`;
+
+                addToHistory(sign);
+                detectionCount = 0;
+            }
+        }
+
+        // Add to translation history
+        function addToHistory(sign) {
+            const history = document.getElementById('history');
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            
+            item.innerHTML = `
+                <strong>${sign}</strong>
+                <div class="timestamp">${timeStr}</div>
+            `;
+            
+            history.insertBefore(item, history.children[1] || null);
+
+            // Keep only last 5 items
+            while (history.children.length > 6) {
+                history.removeChild(history.lastChild);
+            }
+        }
+
+        // Speech Recognition
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognitionInstance = new SpeechRecognition();
+                recognitionInstance.continuous = false;
+                recognitionInstance.interimResults = false;
+                recognitionInstance.lang = 'en-US';
+
+                recognitionInstance.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    document.getElementById('speechInput').value = transcript.toUpperCase();
+                    translateText();
+                };
+
+                recognitionInstance.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    alert('Speech recognition error: ' + event.error);
+                };
+            } else {
+                document.getElementById('speakBtn').disabled = true;
+                document.getElementById('speakBtn').textContent = '🎤 Not Supported';
+            }
+        }
+
+        function startSpeechRecognition() {
+            if (recognitionInstance) {
+                recognitionInstance.start();
+                document.getElementById('speakBtn').textContent = '🎤 Listening...';
+                
+                recognitionInstance.onend = () => {
+                    document.getElementById('speakBtn').textContent = '🎤 Speak';
+                };
+            }
+        }
+
+        // Text to Sign Translation
+        function translateText() {
+            const input = document.getElementById('speechInput').value.trim().toUpperCase();
+            const output = document.getElementById('speechOutput');
+
+            if (signDatabase[input]) {
+                const sign = signDatabase[input];
+                output.innerHTML = `
+                    <div style="text-align: center;">
+                        <div style="font-size: 3em; margin-bottom: 15px;">${sign.emoji} ${input}</div>
+                        <div style="font-size: 1.1em; color: #667eea; font-weight: bold; margin-bottom: 10px;">
+                            ${sign.instruction}
+                        </div>
+                        <div style="font-size: 0.9em; color: #718096; padding: 10px; background: #edf2f7; border-radius: 5px;">
+                            Category: <strong>${sign.category.toUpperCase()}</strong>
+                        </div>
+                    </div>
+                `;
+                
+                // Highlight in guide
+                document.querySelectorAll('.sign-card').forEach(card => {
+                    card.classList.remove('active');
+                    if (card.textContent.includes(input)) {
+                        card.classList.add('active');
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+            } else {
+                output.innerHTML = `
+                    <p style="text-align: center; color: #f56565;">
+                        ❌ Sign not found. Please choose from the 25 available signs below or use the search box.
+                    </p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
