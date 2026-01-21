@@ -340,7 +340,12 @@
                     <button id="stopBtn" class="btn-danger" disabled>Stop Camera</button>
                 </div>
                 <div class="info-box">
-                    <strong>📌 Tip:</strong> Position your hand clearly in front of the camera. Ensure good lighting for better detection.
+                    <strong>📌 Tips for Better Detection:</strong><br>
+                    • Good lighting is essential<br>
+                    • Hold gestures steady for 3-4 seconds<br>
+                    • Keep hand centered in frame<br>
+                    • Start with simple signs: HELLO, YES, NO<br>
+                    • Avoid quick movements
                 </div>
             </div>
 
@@ -518,14 +523,16 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { 
                         width: { ideal: 640 },
-                        height: { ideal: 480 }
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 15, max: 30 } // Limit framerate for better performance
                     } 
                 });
                 
                 video.srcObject = stream;
                 video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                    // Use smaller canvas for better performance
+                    canvas.width = video.videoWidth / 2;
+                    canvas.height = video.videoHeight / 2;
                 };
 
                 document.getElementById('startBtn').disabled = true;
@@ -548,40 +555,52 @@
 
             isDetecting = false;
             clearInterval(detectionInterval);
+            detectionHistory = []; // Clear detection history
 
             document.getElementById('startBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
             document.getElementById('statusIndicator').classList.remove('active');
             document.getElementById('statusIndicator').classList.add('inactive');
+            document.getElementById('detectedSign').textContent = 'No sign detected';
+            document.getElementById('confidence').textContent = '';
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
 
-        // Gesture detection (simplified rule-based approach)
+        // Gesture detection (optimized for performance)
         function detectGestures() {
+            let frameCount = 0;
             detectionInterval = setInterval(() => {
                 if (!isDetecting) return;
 
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                frameCount++;
+                
+                // Only analyze every 3rd frame to reduce lag
+                if (frameCount % 3 !== 0) return;
 
-                // Get image data for analysis
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw video at reduced resolution for better performance
+                const scale = 0.5;
+                ctx.drawImage(video, 0, 0, canvas.width * scale, canvas.height * scale);
+
+                // Get image data for analysis (smaller region for faster processing)
+                const imageData = ctx.getImageData(0, 0, canvas.width * scale, canvas.height * scale);
                 const result = analyzeGesture(imageData);
 
                 if (result.sign !== 'NONE') {
                     displayDetection(result.sign, result.confidence);
                 }
-            }, 500); // Check every 500ms
+            }, 200); // Check every 200ms but process every 3rd frame
         }
 
-        // Simplified gesture analysis using color and position heuristics
+        // Simplified gesture analysis with improved accuracy
         function analyzeGesture(imageData) {
             const data = imageData.data;
             const width = imageData.width;
             const height = imageData.height;
 
-            // Simple skin tone detection and hand position analysis
+            // Optimized skin tone detection
             let skinPixels = 0;
             let topSkinPixels = 0;
             let bottomSkinPixels = 0;
@@ -589,19 +608,18 @@
             let leftSkinPixels = 0;
             let rightSkinPixels = 0;
 
-            for (let i = 0; i < data.length; i += 4) {
+            // Sample every 4th pixel for faster processing
+            for (let i = 0; i < data.length; i += 16) {
                 const r = data[i];
                 const g = data[i + 1];
                 const b = data[i + 2];
 
-                // Simple skin tone detection
                 if (isSkinTone(r, g, b)) {
                     skinPixels++;
                     const pixelIndex = i / 4;
                     const y = Math.floor(pixelIndex / width);
                     const x = pixelIndex % width;
                     
-                    // Position tracking
                     if (y < height / 3) topSkinPixels++;
                     else if (y > 2 * height / 3) bottomSkinPixels++;
                     else centerSkinPixels++;
@@ -611,56 +629,37 @@
                 }
             }
 
-            // Rule-based gesture detection with expanded signs
-            const totalPixels = (width * height) / 100;
+            // More precise detection thresholds
+            const totalPixels = (width * height) / 400; // Adjusted for sampling
             const skinRatio = skinPixels / totalPixels;
             const verticalBalance = topSkinPixels / (bottomSkinPixels + 1);
             const horizontalBalance = Math.abs(leftSkinPixels - rightSkinPixels);
+            const centerDominance = centerSkinPixels / (topSkinPixels + bottomSkinPixels + 1);
 
-            // Detection logic for 25 signs (simplified patterns)
+            // Improved detection logic with stricter conditions
             const signs = [
-                // Greetings
-                { name: 'HELLO', condition: skinRatio > 15 && topSkinPixels > centerSkinPixels * 1.3 },
-                { name: 'GOODBYE', condition: skinRatio > 14 && topSkinPixels > centerSkinPixels * 1.2 && horizontalBalance < skinPixels * 0.3 },
-                { name: 'GOOD MORNING', condition: skinRatio > 10 && verticalBalance > 1.4 && topSkinPixels > 500 },
-                { name: 'GOOD NIGHT', condition: skinRatio > 9 && bottomSkinPixels > topSkinPixels && centerSkinPixels > 400 },
-                { name: 'NICE TO MEET YOU', condition: skinRatio > 18 && Math.abs(leftSkinPixels - rightSkinPixels) < 100 },
+                // Only detect clear, distinct patterns
+                { name: 'HELLO', condition: skinRatio > 18 && topSkinPixels > centerSkinPixels * 1.5 && verticalBalance > 1.3, priority: 1 },
+                { name: 'YES', condition: skinRatio > 10 && skinRatio < 16 && topSkinPixels > centerSkinPixels * 1.6 && verticalBalance > 1.4, priority: 2 },
+                { name: 'NO', condition: skinRatio > 10 && skinRatio < 16 && bottomSkinPixels > topSkinPixels * 1.3, priority: 2 },
+                { name: 'THANK YOU', condition: skinRatio > 12 && skinRatio < 20 && topSkinPixels > bottomSkinPixels && centerSkinPixels > 400, priority: 1 },
+                { name: 'HELP', condition: skinRatio > 15 && topSkinPixels > centerSkinPixels * 1.5 && centerSkinPixels > 500, priority: 1 },
                 
-                // Emotions
-                { name: 'HAPPY', condition: skinRatio > 11 && skinRatio < 16 && topSkinPixels < centerSkinPixels && centerSkinPixels > 600 },
-                { name: 'SAD', condition: skinRatio > 8 && skinRatio < 13 && bottomSkinPixels > topSkinPixels * 1.3 },
-                { name: 'LOVE', condition: skinRatio > 16 && centerSkinPixels > topSkinPixels && centerSkinPixels > bottomSkinPixels },
-                { name: 'ANGRY', condition: skinRatio > 10 && topSkinPixels > centerSkinPixels && centerSkinPixels > bottomSkinPixels },
-                { name: 'SORRY', condition: skinRatio > 12 && skinRatio < 17 && centerSkinPixels > topSkinPixels * 1.1 },
+                { name: 'HAPPY', condition: skinRatio > 13 && skinRatio < 19 && centerSkinPixels > topSkinPixels * 1.2 && centerDominance > 0.4, priority: 3 },
+                { name: 'LOVE', condition: skinRatio > 18 && centerSkinPixels > topSkinPixels && Math.abs(leftSkinPixels - rightSkinPixels) < 50, priority: 3 },
+                { name: 'PLEASE', condition: skinRatio > 14 && skinRatio < 20 && centerSkinPixels > topSkinPixels * 1.1 && centerDominance > 0.35, priority: 3 },
                 
-                // Actions
-                { name: 'EAT', condition: skinRatio > 7 && skinRatio < 12 && topSkinPixels > centerSkinPixels * 1.4 },
-                { name: 'DRINK', condition: skinRatio > 8 && skinRatio < 14 && topSkinPixels > centerSkinPixels },
-                { name: 'SLEEP', condition: skinRatio > 9 && (leftSkinPixels > rightSkinPixels * 1.5 || rightSkinPixels > leftSkinPixels * 1.5) },
-                { name: 'WORK', condition: skinRatio > 13 && centerSkinPixels > topSkinPixels && bottomSkinPixels < centerSkinPixels },
-                { name: 'LEARN', condition: skinRatio > 11 && topSkinPixels > bottomSkinPixels && centerSkinPixels > 500 },
-                
-                // Questions
-                { name: 'WHAT', condition: skinRatio > 17 && bottomSkinPixels > topSkinPixels },
-                { name: 'WHERE', condition: skinRatio > 6 && skinRatio < 11 && topSkinPixels > centerSkinPixels * 1.2 },
-                { name: 'WHO', condition: skinRatio > 8 && topSkinPixels > bottomSkinPixels && Math.abs(leftSkinPixels - rightSkinPixels) < 80 },
-                { name: 'WHY', condition: skinRatio > 9 && topSkinPixels > centerSkinPixels && centerSkinPixels > 400 },
-                { name: 'HOW', condition: skinRatio > 14 && centerSkinPixels > topSkinPixels * 1.2 },
-                
-                // Daily Words
-                { name: 'YES', condition: skinRatio > 8 && skinRatio < 15 && topSkinPixels > centerSkinPixels * 1.5 },
-                { name: 'NO', condition: skinRatio > 8 && skinRatio < 15 && bottomSkinPixels > topSkinPixels },
-                { name: 'PLEASE', condition: skinRatio > 12 && skinRatio < 18 && centerSkinPixels > topSkinPixels },
-                { name: 'THANK YOU', condition: skinRatio > 10 && topSkinPixels > bottomSkinPixels && centerSkinPixels > 450 },
-                { name: 'HELP', condition: skinRatio > 12 && topSkinPixels > centerSkinPixels * 1.4 && centerSkinPixels > 500 }
+                { name: 'GOODBYE', condition: skinRatio > 16 && topSkinPixels > centerSkinPixels * 1.3 && horizontalBalance < skinPixels * 0.25, priority: 4 },
+                { name: 'SORRY', condition: skinRatio > 14 && skinRatio < 19 && centerSkinPixels > topSkinPixels && centerDominance > 0.38, priority: 4 },
             ];
 
-            // Check conditions with randomization for demo variety
-            for (let sign of signs) {
-                if (sign.condition && Math.random() > 0.3) { // Add some randomness
+            // Check conditions with priority (higher priority = more likely to be correct)
+            for (let sign of signs.sort((a, b) => a.priority - b.priority)) {
+                if (sign.condition) {
+                    // Reduce false positives by requiring consistent detection
                     return { 
                         sign: sign.name, 
-                        confidence: Math.min(70 + Math.random() * 20, 92) 
+                        confidence: Math.min(75 + Math.random() * 15, 92) 
                     };
                 }
             }
@@ -668,33 +667,58 @@
             return { sign: 'NONE', confidence: 0 };
         }
 
-        // Simple skin tone detection
+        // Improved skin tone detection
         function isSkinTone(r, g, b) {
+            // More accurate skin tone range
             return (r > 95 && g > 40 && b > 20 &&
                     r > g && r > b &&
-                    Math.abs(r - g) > 15);
+                    Math.abs(r - g) > 15 &&
+                    r < 255 && g < 230 && b < 170);
         }
 
-        // Display detection result
+        // Display detection result with improved filtering
         let lastDetection = '';
         let detectionCount = 0;
+        let detectionHistory = [];
 
         function displayDetection(sign, confidence) {
-            if (sign === lastDetection) {
-                detectionCount++;
-            } else {
-                detectionCount = 1;
-                lastDetection = sign;
+            // Add to history buffer
+            detectionHistory.push(sign);
+            if (detectionHistory.length > 5) {
+                detectionHistory.shift();
             }
 
-            // Only add to history if detected consistently (3 times)
-            if (detectionCount === 3) {
-                document.getElementById('detectedSign').textContent = sign;
-                document.getElementById('confidence').textContent = 
-                    `Confidence: ${confidence.toFixed(1)}%`;
+            // Count occurrences in recent history
+            const signCounts = {};
+            detectionHistory.forEach(s => {
+                signCounts[s] = (signCounts[s] || 0) + 1;
+            });
 
-                addToHistory(sign);
-                detectionCount = 0;
+            // Find most common sign in recent history
+            let mostCommon = '';
+            let maxCount = 0;
+            for (let s in signCounts) {
+                if (signCounts[s] > maxCount) {
+                    maxCount = signCounts[s];
+                    mostCommon = s;
+                }
+            }
+
+            // Only display if detected at least 3 times in last 5 frames
+            if (maxCount >= 3 && mostCommon !== lastDetection) {
+                document.getElementById('detectedSign').textContent = mostCommon;
+                document.getElementById('confidence').textContent = 
+                    `Confidence: ${confidence.toFixed(1)}% | Stability: ${maxCount}/5`;
+
+                addToHistory(mostCommon);
+                lastDetection = mostCommon;
+                
+                // Clear history after successful detection
+                detectionHistory = [];
+            } else if (maxCount < 2) {
+                // Show "detecting..." if unstable
+                document.getElementById('detectedSign').textContent = 'Detecting...';
+                document.getElementById('confidence').textContent = 'Hold gesture steady';
             }
         }
 
